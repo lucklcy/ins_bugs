@@ -29,17 +29,29 @@ const quertGraph = async ctx => {
               let { end_cursor } = page_info
               if (edges && edges.length > 0) {
                 edges.forEach(edgeItem => {
-                  let { display_url, edge_sidecar_to_children } = edgeItem && edgeItem['node']
-                  if (edge_sidecar_to_children && edge_sidecar_to_children.edges) {
-                    let childEdges = edge_sidecar_to_children.edges
-                    childEdges.forEach(edgeSideItem => {
-                      let {
-                        node: { display_url },
-                      } = edgeSideItem
-                      picInHtmls.push(display_url)
-                    })
+                  let { display_url, dimensions, edge_sidecar_to_children, video_url, is_video } = edgeItem && edgeItem['node']
+                  if (is_video) {
+                    picInHtmls.push({ src: video_url, is_video: true })
                   } else {
-                    picInHtmls.push(display_url)
+                    if (edge_sidecar_to_children && edge_sidecar_to_children.edges) {
+                      let childEdges = edge_sidecar_to_children.edges
+                      childEdges.forEach(edgeSideItem => {
+                        let {
+                          node: { display_url: child_display_url, dimensions: child_dimensions },
+                        } = edgeSideItem
+                        picInHtmls.push({
+                          src: child_display_url,
+                          config_height: child_dimensions.height,
+                          config_width: child_dimensions.width,
+                        })
+                      })
+                    } else {
+                      picInHtmls.push({
+                        src: display_url,
+                        config_height: dimensions.height,
+                        config_width: dimensions.width,
+                      })
+                    }
                   }
                 })
               }

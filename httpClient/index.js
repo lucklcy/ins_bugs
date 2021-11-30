@@ -1,12 +1,17 @@
 const axios = require('axios')
 const _ = require('lodash')
-const { SUCCESS_STATUS_CODE } = require('../common/const')
+const { SUCCESS_STATUS_CODE, PROXY_IP, PROXY_PORT } = require('../common/const')
 const ins = require('./api/ins')
 const moment = require('moment')
 const { HEADERS } = require('../common/const')
+const HttpsProxyAgent = require('https-proxy-agent')
+
+const agent = new HttpsProxyAgent(`http://${PROXY_IP}:${PROXY_PORT}`)
 
 const defaultConfig = {
   timeout: 10000,
+  httpsAgent: agent,
+  httpAgent: agent,
 }
 
 const initConfig = baseUrl => {
@@ -40,7 +45,9 @@ function Service() {
       let { url, params: requestParams, method, startTime } = config
       let costTime = new Date().getTime() - parseInt(startTime)
       let now = moment().format('YYYY-MM-DD HH:mm:SSS')
-      console.log(`${costTime}ms ${now} ${method.toUpperCase()} for ${url}\r\nRequestParams:  ${JSON.stringify(requestParams)}\r\n>>>>>>>>>>Response Status:  ${status}`)
+      console.log(
+        `${costTime}ms ${now} ${method.toUpperCase()} for ${url}\r\nRequestParams:  ${JSON.stringify(requestParams)}\r\n>>>>>>>>>>Response Status:  ${status}`
+      )
       if (status !== SUCCESS_STATUS_CODE) {
         return Promise.reject(responseResult)
       }

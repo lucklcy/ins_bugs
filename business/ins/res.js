@@ -1,11 +1,13 @@
 const https = require('https')
-const { INS_URL, HEADERS, QUERY_HASH } = require('../../common/const')
+const { INS_URL, HEADERS, QUERY_HASH, PROXY_IP, PROXY_PORT, ROOT_DIRECTORY } = require('../../common/const')
 const api = require('../../httpClient')
 const path = require('path')
 const { createDirectory, uuid, _replaceAll } = require('../../utils/index.js')
 const fs = require('fs')
-const request = require('request')
-const rootDirectory = '/Users/liuchongyang/ins'
+
+const request = require('request').defaults({
+  proxy: `http://${PROXY_IP}:${PROXY_PORT}`,
+})
 let subDir = null
 
 const generateSubDir = path => {
@@ -16,26 +18,19 @@ const generateSubDir = path => {
 const getHtml = queryPath => {
   return new Promise((resolve, reject) => {
     generateSubDir(queryPath)
-    const req = https.get(`${INS_URL}/${queryPath}/`, { headers: HEADERS }, function (res) {
-      let chunks = []
-      let size = 0
-      res.on('data', function (chunk) {
-        chunks.push(chunk)
-        size += chunk.length
-      })
-      res.on('end', function () {
-        let data = Buffer.concat(chunks, size)
-        resolve(data.toString())
-      })
-    })
-    req.on('error', e => {
-      reject(e)
+    request.get(`${INS_URL}/${queryPath}/`, { headers: HEADERS }, function (error, response, body) {
+      if (error) {
+        reject(error)
+      } else {
+        resolve(body)
+      }
     })
   })
 }
 
-const downloadFile = (url, filePath, callback) => {
-  let fileName = new Date().getTime() + '_' + uuid(16) + '.jpg'
+const downloadFile = (url, filePath, isVideo, callback) => {
+  let fileName = new Date().getTime() + '_' + uuid(16)
+  fileName += isVideo ? '.mp4' : '.jpg'
   let stream = fs.createWriteStream(path.resolve(filePath, `./${fileName}`))
   request(url)
     .pipe(stream)
@@ -49,13 +44,13 @@ const downloadFile = (url, filePath, callback) => {
 
 const downloadOfList = (list, index) => {
   if (list && list.length > 0 && index < list.length) {
-    let url = list[index]
-    if (url.indexOf('.jpg') > -1) {
-      downloadFile(url, path.resolve(rootDirectory, `./${subDir}`), function () {
-        console.log('=========== 开始下载第 ' + index + ' 个文件===========')
-        downloadOfList(list, ++index)
-      })
-    }
+    const { src: url, is_video, config_height, config_width } = list[index]
+    downloadFile(url, path.resolve(ROOT_DIRECTORY, `./${subDir}`), is_video, function () {
+      let msg = `=========== 开始下载第 ${index} 个文件, 视频：${is_video ? '是' : '否'}, `
+      is_video ? (msg += `===========`) : (msg += `长：${config_height},宽：${config_width} ===========`)
+      console.log(msg)
+      downloadOfList(list, ++index)
+    })
   } else {
     console.log('没有更多的文件了=======')
   }
@@ -71,17 +66,21 @@ const getPicFromQuery = (id, endPoint, picArray) => {
     let { edges, page_info } = edge_owner_to_timeline_media || {}
     if (edges && edges.length > 0) {
       edges.forEach(edgeItem => {
-        let { display_url, edge_sidecar_to_children } = edgeItem && edgeItem['node']
-        if (edge_sidecar_to_children && edge_sidecar_to_children.edges) {
-          let childEdges = edge_sidecar_to_children.edges
-          childEdges.forEach(edgeSideItem => {
-            let {
-              node: { display_url },
-            } = edgeSideItem
-            picArray.push(display_url)
-          })
+        let { display_resources, edge_sidecar_to_children, video_url, is_video } = edgeItem && edgeItem['node']
+        if (is_video) {
+          picArray.push({ src: video_url, is_video: true })
         } else {
-          picArray.push(display_url)
+          if (edge_sidecar_to_children && edge_sidecar_to_children.edges) {
+            let childEdges = edge_sidecar_to_children.edges
+            childEdges.forEach(edgeSideItem => {
+              let {
+                node: { display_resources: child_display_resources },
+              } = edgeSideItem
+              picArray.push(child_display_resources[child_display_resources.length - 1])
+            })
+          } else {
+            picArray.push(display_resources[display_resources.length - 1])
+          }
         }
       })
     }
@@ -90,10 +89,10 @@ const getPicFromQuery = (id, endPoint, picArray) => {
     if (has_next_page) {
       setTimeout(() => {
         getPicFromQuery(id, end_cursor, picArray)
-      }, 200)
+      }, 3000)
     } else {
-      createDirectory(`/${subDir}`, rootDirectory)
-      fs.writeFile(path.resolve(rootDirectory, `./${subDir}/pic.json`), JSON.stringify(picArray), err => {
+      createDirectory(`/${subDir}`, ROOT_DIRECTORY)
+      fs.writeFile(path.resolve(ROOT_DIRECTORY, `./${subDir}/pic.json`), JSON.stringify(picArray), err => {
         if (err) {
           console.error(err)
           return
