@@ -126,10 +126,13 @@ const copyFolder = (srcDir, tarDir, cb) => {
   })
 }
 
+const generateSubDir = path => (path.indexOf('.') > -1 ? _replaceAll('.', '_', path) : path)
+
 module.exports = {
   emptyDirectory,
   createDirectory,
   copyFolder,
   uuid,
   _replaceAll,
+  generateSubDir,
 }
